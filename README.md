@@ -1,6 +1,6 @@
 ## Add In Rom
 
-Add This Line In device.mk
+Add This Line In device.mk / common.mk
 
 ```bash
 $(call inherit-product, vendor/bcr/bcr.mk)
