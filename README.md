@@ -6,6 +6,10 @@ Add This Line In device.mk / common.mk
 $(call inherit-product, vendor/bcr/bcr.mk)
 ```
 
+```bash
+git clone https://gitlab.com/ram-unlok/bcr.git vendor/bcr
+```
+
 # Basic Call Recorder
 
 ![latest release badge](https://img.shields.io/github/v/release/chenxiaolong/BCR?sort=semver)
