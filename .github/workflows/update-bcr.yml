@@ -1,0 +1,71 @@
+name: Update BCR Prebuilts
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Runs every Monday at 00:00 UTC
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  update-bcr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for new BCR release
+        id: check_release
+        run: |
+          LATEST_TAG=$(curl -sL -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/chenxiaolong/BCR/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' || true)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "API rate-limited or unavailable, falling back to release redirect..."
+            LATEST_TAG=$(curl -sIL https://github.com/chenxiaolong/BCR/releases/latest | grep -i -m1 '^location:' | sed -E 's/.*\/tag\/(.*)/\1/' | tr -d '\r\n')
+          fi
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "Error: Could not determine latest BCR tag."
+            exit 1
+          fi
+
+          echo "Latest release tag: $LATEST_TAG"
+          CURRENT_VERSION=$(cat VERSION 2>/dev/null || echo "")
+          echo "Current version in repo: $CURRENT_VERSION"
+
+          if [ "$LATEST_TAG" = "$CURRENT_VERSION" ]; then
+            echo "Already up to date."
+            echo "updated=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CLEAN_VER="${LATEST_TAG#v}"
+          ZIP_URL="https://github.com/chenxiaolong/BCR/releases/download/${LATEST_TAG}/BCR-${CLEAN_VER}-release.zip"
+          echo "Downloading $ZIP_URL..."
+          curl -sL -o bcr_release.zip "$ZIP_URL"
+
+          echo "Extracting files safely to temporary folder..."
+          rm -rf bcr_temp
+          unzip -q -o bcr_release.zip -d bcr_temp
+
+          mkdir -p prebuilts/product/priv-app/com.chiller3.bcr
+          mkdir -p prebuilts/product/etc/permissions
+
+          cp bcr_temp/system/priv-app/com.chiller3.bcr/app-release.apk prebuilts/product/priv-app/com.chiller3.bcr/bcr.apk
+          cp bcr_temp/system/etc/permissions/privapp-permissions-com.chiller3.bcr.xml prebuilts/product/etc/permissions/
+
+          echo "$LATEST_TAG" > VERSION
+
+          rm -rf bcr_release.zip bcr_temp
+
+          echo "updated=true" >> $GITHUB_OUTPUT
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Commit and push changes
+        if: steps.check_release.outputs.updated == 'true'
+        run: |
+          git config user.name "Nighty"
+          git config user.email "ty.khalifa122@gmail.com"
+          git add VERSION prebuilts/
+          git commit -m "bcr: Update to ${{ steps.check_release.outputs.tag }}"
+          git push origin main
